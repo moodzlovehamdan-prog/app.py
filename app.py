@@ -6,99 +6,102 @@ import pandas as pd
 import re
 import io
 
-# إعدادات واجهة البرنامج
-st.set_page_config(page_title="Dynamics Smart Auditor", layout="wide")
+# إعداد واجهة البرنامج
+st.set_page_config(page_title="Dynamics Audit Pro", layout="wide")
 
-st.title("🤖 محاسب داينمك الذكي | Dynamics AI Auditor")
-st.write("نظام فحص القيود الآلي واستخراج تقارير الإكسل")
+st.title("🤖 المحاسب الذكي لتدقيق قيود داينمك")
+st.write("ارفع صورة القيد وسأقوم بالتحقق من التاريخ، الحسابات، وتوازن القيد")
 
-# --- قاعدة بيانات الحسابات المعتمدة لديك ---
-ACCOUNTS_MAP = {
+# --- قائمة الحسابات المعتمدة وقواعد العمل ---
+ACCOUNTS_RULES = {
     "1010101004": "CASH IN SHOWROOMS",
-    "1010203014": "Beauty Secrets (Transit)",
-    "1010101006": "Cash Discrepancy (العجز)",
+    "1010203014": "Beauty Secrets",
+    "1010101006": "Cash Discrepancy",
     "1010101005": "Store Cash - Control",
     "1010101007": "POS Networks – Control"
 }
 
-# قائمة الأبعاد المالية (التي ظهرت في صورك)
-DIMENSIONS_LIST = ["20723", "20732", "20721"]
-
-uploaded_file = st.file_uploader("📸 ارفع صورة القيد من شاشة الداينمك", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("📸 ارفع صورة القيد (Snapshot)", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
-    st.image(image, caption='القيد الجاري فحصه', use_container_width=True)
+    st.image(image, caption='القيد الجاري فحص صحته', use_container_width=True)
     
-    with st.spinner('جاري المسح الشامل للأعمدة والمبالغ...'):
+    with st.spinner('جاري التدقيق المحاسبي وفحص التواريخ...'):
         img_array = np.array(image)
-        # قراءة النصوص بالعربي والإنجليزي
         reader = easyocr.Reader(['ar', 'en'])
         results = reader.readtext(img_array)
         
-        # استخراج النصوص والبيانات
         raw_text = [res[1] for res in results]
         full_content = " ".join(raw_text).upper()
 
-        # --- تحليل البيانات المستخرجة ---
         st.divider()
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("🔍 تفاصيل القيد المكتشفة")
+            st.subheader("📌 البيانات المستخرجة")
             
-            # استخراج التاريخ ورقم القيد
-            date_match = re.findall(r'\d{1,2}/\d{1,2}/\d{4}', full_content)
-            voucher_match = re.findall(r'SGTU-\d+', full_content)
+            # 1. فحص التاريخ
+            dates = re.findall(r'\d{1,2}/\d{1,2}/\d{4}', full_content)
+            current_date = dates[0] if dates else "غير معروف"
+            st.write(f"📅 **تاريخ القيد:** {current_date}")
             
-            if date_match: st.info(f"📅 **التاريخ:** {date_match[0]}")
-            if voucher_match: st.info(f"🔢 **رقم القيد:** {voucher_match[0]}")
-            
-            # استخراج الأبعاد (مثل VRM.UAE.20723)
-            found_dims = [d for d in DIMENSIONS_LIST if d in full_content]
-            if found_dims:
-                st.write(f"🏢 **الأبعاد المالية (Branches):** {', '.join(found_dims)}")
+            # 2. فحص الأبعاد المالية (Dimension)
+            branch_match = re.search(r'207\d{2}', full_content)
+            branch_code = branch_match.group() if branch_match else "مفقود"
+            st.write(f"🏢 **كود الفرع (Dimension):** {branch_code}")
 
         with col2:
-            st.subheader("🛠️ التوجيه المحاسبي")
-            found_accs = []
-            for acc, name in ACCOUNTS_MAP.items():
-                if acc in full_content:
-                    st.success(f"✅ تم رصد حساب: {acc} - {name}")
-                    found_accs.append(acc)
+            st.subheader("⚖️ تحليل صحة القيد")
             
-            # منطق "خبير المحاسبة"
-            if "1010101006" in found_accs:
-                st.warning("⚠️ تنبيه محاسبي: هذا القيد يحتوي على 'تسوية عجز نقدية'.")
-            if "CDM" in full_content:
-                st.info("💰 نوع العملية: إيداع نقدي (Cash Deposit)")
+            validation_errors = []
+            
+            # فحص وجود الحسابات
+            found_accs = [acc for acc in ACCOUNTS_RULES if acc in full_content]
+            
+            # منطق التحقق (Validation Logic)
+            if not dates:
+                validation_errors.append("❌ خطأ: التاريخ غير واضح أو مفقود.")
+            
+            if branch_code == "مفقود":
+                validation_errors.append("❌ خطأ: لم يتم رصد كود الفرع (Dimension).")
+                
+            if len(found_accs) < 2:
+                validation_errors.append("❌ خطأ: القيد غير متوازن (يجب وجود طرفين على الأقل).")
 
-        # --- قسم استخراج ملف Excel ---
-        st.subheader("📥 استخراج البيانات إلى Excel")
-        
-        # تجهيز جدول البيانات للتقرير
+            # عرض النتيجة النهائية
+            if not validation_errors:
+                st.success("✅ القيد جاهز للتسجيل: كافة البيانات الأساسية مكتملة.")
+            else:
+                for error in validation_errors:
+                    st.error(error)
+
+        # --- أتمتة الوصف المحاسبي ---
+        st.subheader("📝 ملخص الحركة")
+        if "1010101006" in found_accs:
+            st.warning("⚠️ تنبيه: القيد يحتوي على تسوية عجز (Cash Discrepancy). تأكد من إرفاق الموافقات.")
+        elif "1010101007" in found_accs or "1010203014" in found_accs:
+            st.info("ℹ️ نوع الحركة: تحويل مبيعات (POS/CDM) إلى حسابات الوساطة.")
+
+        # --- استخراج التقرير ---
         report_data = {
-            "Date": date_match[0] if date_match else "N/A",
-            "Voucher No": voucher_match[0] if voucher_match else "N/A",
-            "Accounts": ", ".join([f"{a} ({ACCOUNTS_MAP[a]})" for a in found_accs]),
-            "Dimensions": ", ".join(found_dims) if found_dims else "Missing",
-            "Status": "Verified" if len(found_accs) >= 2 else "Check Required"
+            "تاريخ القيد": current_date,
+            "كود الفرع": branch_code,
+            "الحسابات المكتشفة": ", ".join(found_accs),
+            "حالة القيد": "جاهز" if not validation_errors else "يحتاج مراجعة"
         }
         
         df = pd.DataFrame([report_data])
-
-        # تحويل لملف Excel
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='Audit_Report')
-        excel_file = output.getvalue()
-
+            df.to_excel(writer, index=False)
+        
         st.download_button(
-            label="تحميل تقرير التدقيق (Excel)",
-            data=excel_file,
-            file_name=f"Audit_Report_{voucher_match[0] if voucher_match else 'New'}.xlsx",
+            label="📥 تحميل تقرير التدقيق (Excel)",
+            data=output.getvalue(),
+            file_name=f"Audit_{branch_code}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
 st.divider()
-st.caption("برنامج مساعد للمحاسب محمد باسم - Senior Inventory Accountant")
+st.caption("برنامج مساعد للمحاسب محمد باسم - تدقيق آلي لقيود Dynamics")
