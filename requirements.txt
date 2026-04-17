@@ -1,4 +1,6 @@
 streamlit
 easyocr
 pillow
+pandas
+xlsxwriter
 opencv-python-headless
